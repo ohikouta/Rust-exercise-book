@@ -1,4 +1,4 @@
-use clap::App;
+use clap::{ App, Arg };
 use std::error::Error;
 use std::io;
 
@@ -16,13 +16,43 @@ pub fn get_args() -> MyResult<Config> {
         .version("0.1.0")
         .author("Ken Youens-Clark <kyclark@gmail.com>")
         .about("Rust head")
+        .arg(
+            Arg::with_name("files")
+                .value_name("FILE")
+                .default_value("-")
+                .multiple(true),
+        )
+        .arg(
+            Arg::with_name("lines")
+                .short("n")
+                .long("lines")
+                .default_value("10"),
+        )
+        .arg(
+            Arg::with_name("bytes")
+                .short("e")
+                .long("bytes")
+                .conflicts_with("lines"),
+        )
         .get_matches();
 
-    Ok(Config {
-        files: vec![],
-        lines: 10,
-        bytes: None,
-    })
+    let files = matches
+        .values_of("files")
+        .map(|vals| vals.map(String::from).collect())
+        .unwrap_or_else(|| vec!["-".to_string()]);
+
+    let lines = matches
+        .value_of("lines")
+        .map(parse_positive_int)
+        .transpose()?
+        .unwrap_or(10);
+
+    let bytes = matches
+        .value_of("bytes")
+        .map(parse_positive_int)
+        .transpose()?;
+    
+    Ok(Config { files, lines, bytes })
 }
 
 pub fn run(config: Config) -> MyResult<()> {
@@ -30,6 +60,7 @@ pub fn run(config: Config) -> MyResult<()> {
     Ok(())
 }
 
+// 自作
 fn parse_positive_int_self(val: &str) -> MyResult<usize> {
     match val.parse::<usize>() {
         Ok(0) => Err(Box::new(io::Error::new(io::ErrorKind::InvalidInput, "0"))),
@@ -38,6 +69,7 @@ fn parse_positive_int_self(val: &str) -> MyResult<usize> {
     }
 }
 
+// テキスト
 fn parse_positive_int(val: &str) -> MyResult<usize> {
     match val.parse() {
         Ok(n) if n > 0 => Ok(n),
