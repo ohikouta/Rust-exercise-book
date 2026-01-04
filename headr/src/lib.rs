@@ -30,8 +30,9 @@ pub fn get_args() -> MyResult<Config> {
         )
         .arg(
             Arg::with_name("bytes")
-                .short("e")
+                .short("c")
                 .long("bytes")
+                .takes_value(true)
                 .conflicts_with("lines"),
         )
         .get_matches();
