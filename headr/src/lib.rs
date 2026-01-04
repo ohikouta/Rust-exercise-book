@@ -26,31 +26,55 @@ pub fn get_args() -> MyResult<Config> {
             Arg::with_name("lines")
                 .short("n")
                 .long("lines")
-                .default_value("10"),
+                .value_name("LINES")
+                .takes_value(true),
         )
         .arg(
             Arg::with_name("bytes")
                 .short("c")
                 .long("bytes")
                 .takes_value(true)
-                .conflicts_with("lines"),
+                .value_name("BYTES"),
         )
         .get_matches();
 
+    // linesとbytesが指定されたら弾く処理
+    if matches.is_present("lines") && matches.is_present("bytes") {
+        return Err(From::from(
+            "the argument '--lines <LINES>' cannot be used with '--bytes <BYTES>'",
+        ));
+    }
+
+    
     let files = matches
         .values_of("files")
         .map(|vals| vals.map(String::from).collect())
         .unwrap_or_else(|| vec!["-".to_string()]);
 
-    let lines = matches
-        .value_of("lines")
-        .map(parse_positive_int)
-        .transpose()?
-        .unwrap_or(10);
+    let lines_val = matches.value_of("lines").unwrap_or("10");
+    let lines = parse_positive_int(lines_val).map_err(|_| {
+        Box::new(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "error: invalid value '{lines_val}' for '--lines <LINES>': \
+invalid digit found in string"
+            ),
+        )) as Box<dyn Error>
+    })?;
 
     let bytes = matches
         .value_of("bytes")
-        .map(parse_positive_int)
+        .map(|val| {
+            parse_positive_int(val).map_err(|_| {
+                Box::new(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!(
+                        "error: invalid value '{val}' for '--bytes <BYTES>': \
+invalid digit found in string"
+                    ),
+                )) as Box<dyn Error>
+            })
+        })
         .transpose()?;
     
     Ok(Config { files, lines, bytes })
