@@ -45,7 +45,6 @@ pub fn get_args() -> MyResult<Config> {
         ));
     }
 
-    
     let files = matches
         .values_of("files")
         .map(|vals| vals.map(String::from).collect())
