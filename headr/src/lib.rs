@@ -1,6 +1,7 @@
 use clap::{ App, Arg };
 use std::error::Error;
-use std::io;
+use std::fs::File;
+use std::io::{self, BufRead, BufReader};
 
 type MyResult<T> = Result<T, Box<dyn Error>>;
 
@@ -80,11 +81,24 @@ invalid digit found in string"
 }
 
 pub fn run(config: Config) -> MyResult<()> {
-    println!("{:#?}", config);
+    for filename in config.files {
+        match open(&filename) {
+            Err(err) => eprintln!("{}: {}", filename, err),
+            Ok(_) => println!("Opened {}", filename),
+        }
+    }
     Ok(())
 }
 
-// 自作
+fn open(filename: &str) -> MyResult<Box<dyn BufRead>> {
+    match filename {
+        "-" => Ok(Box::new(BufReader::new(io::stdin()))),
+        _ => Ok(Box::new(BufReader::new(File::open(filename)?))),
+    }
+}
+
+/*
+// 自作 positive_int_self
 fn parse_positive_int_self(val: &str) -> MyResult<usize> {
     match val.parse::<usize>() {
         Ok(0) => Err(Box::new(io::Error::new(io::ErrorKind::InvalidInput, "0"))),
@@ -92,6 +106,7 @@ fn parse_positive_int_self(val: &str) -> MyResult<usize> {
         Err(_) => Err(Box::new(io::Error::new(io::ErrorKind::InvalidInput, val.to_string()))),
     }
 }
+*/
 
 // テキスト
 fn parse_positive_int(val: &str) -> MyResult<usize> {
