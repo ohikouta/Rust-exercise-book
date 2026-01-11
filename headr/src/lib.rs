@@ -80,13 +80,58 @@ invalid digit found in string"
     Ok(Config { files, lines, bytes })
 }
 
-pub fn run(config: Config) -> MyResult<()> {
+pub fn run_old(config: Config) -> MyResult<()> {
     for filename in config.files {
         match open(&filename) {
             Err(err) => eprintln!("{}: {}", filename, err),
             Ok(_) => println!("Opened {}", filename),
         }
     }
+    Ok(())
+}
+
+pub fn run(config: Config) -> MyResult<()> {
+    let multiple = config.files.len() > 1;
+
+    if let Some(n) = config.bytes {
+        for (i, filename) in config.files.iter().enumerate() {
+            if multiple {
+                if i > 0 { print!("\n") }
+                print!("==> {filename} <==\n");
+            }
+
+            match open(filename) {
+                Err(e) => eprintln!("{filename}: {e}"),
+                Ok(mut reader ) => {
+                    let mut buffer = vec![0; n];
+                    let bytes_read = reader.read(&mut buffer)?;
+                    print!("{}", String::from_utf8_lossy(&buffer[..bytes_read]));
+                }
+            }
+        }
+    } else {
+        for (i, filename) in config.files.iter().enumerate() {
+            if multiple {
+                if i > 0 { print!("\n"); }
+                print!("==> {filename} <==\n");
+            }
+
+            match open(filename) {
+                Err(e) => eprintln!("{filename}: {e}"),
+                Ok(mut reader) => {
+                    let mut line = String::new();
+                    for _ in 0..config.lines {
+                        let bytes = reader.read_line(&mut line)?;
+                        if bytes == 0 { break; }
+                        print!("{line}");
+                        line.clear();
+                    }
+                }
+            }
+        }
+        
+    }
+
     Ok(())
 }
 
