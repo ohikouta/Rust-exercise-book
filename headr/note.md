@@ -101,6 +101,59 @@ pub fn run(config: Config) -> MyResult<()> {
 }
 ```
 
+## 4.3 解答例
+
+自分の実装と比して異なる部分をまとめる。
+
+### 4.3.1 ファイルを1行ずつ読む
+
+```rust
+pub fn run(config: Config) -> MyResult<()> {
+    for filename in config.files {
+        match open(&filename) {
+            Err(err) => eprintln!("{}: {}", filename, err),
+            Ok(file) => {
+                for line in file.lines().take(config.lines) {
+                    println!("{}", line?);
+                }
+            }
+        }
+    }
+}
+```
+
+- `for line in file.lines().take(config.lines)`とすることで、扱っているファイルについて指定した行数のみループの対象とすることができる。
+- テキストはこの実装について、改行の扱いが再現できていないことを指摘している。
+
+### 4.3.2 改行を保持したままファイルを読み込む
+
+- `lines()`は行末の`\n`や`\r\n`を取り除いて文字列だけ返す
+- `catr`は`println!`を使うことで`lines()`によって取り除かれた改行を追加している。テキストはこれを「WindowsのCRLFをUnixスタイルの開業に置き換えてしまうのです。」と説明している。
+- `BefRead::read_line`を使うと、改行を含めて`line`に持たせることができる。
+- 標準出力には、改行が含まれる`println!`ではなく、改行が含まれない`print!`を使っている。
+
+### 4.3.3 ファイルからバイトを読み込む
+
+- `handle`:`file`のリーダーが読み取り可能なバイトの上限を情報として持つ変数
+  - `std::io::Take<R>`
+    - `R:Read`を包む構造体
+    - 内部的に`inner: R`,`limit: u64`を持つ
+- `bytes_read`:`handle`が読み取った情報を`buffer`に入れている。
+- ファイルから指定したバイト数を読み込む安全かつもっとも短いコード
+
+```rust
+let bytes: Result<Vec<_>, _> = file.bytes().take(num_bytes).collect();
+print!("{}", String::from_utf8_lossy(&bytes?));
+```
+
+- `collect()`はどの型に集めるかを知らないと動けない。
+- 「ヒープに割り当てられたメモリへのスマートポインタ」
+  - Vecはヒープに置かれたデータに関して、「ポインタ」「長さ」「容量」をスタックに保持する。
+- 「アンダースコア(_)は部分的な型注釈を示し、基本的にコンパイラに型を推論させる。」
+  - `Result<Vec<_>, _>`について、成功時の`Vec`の中身およびエラー型は推論させる。
+
+### 4.3.4 ファイルセパレーターを表示する
+
 ## 補足
 
 ### cli.rsのテスト項目
