@@ -1,6 +1,7 @@
-use clap::App;
+use clap::{ App, Arg };
 use std::error::Error;
-use std::io;
+use std::fs::File;
+use std::io::{self, BufRead, BufReader};
 
 type MyResult<T> = Result<T, Box<dyn Error>>;
 
@@ -16,20 +17,133 @@ pub fn get_args() -> MyResult<Config> {
         .version("0.1.0")
         .author("Ken Youens-Clark <kyclark@gmail.com>")
         .about("Rust head")
+        .arg(
+            Arg::with_name("files")
+                .value_name("FILE")
+                .default_value("-")
+                .multiple(true),
+        )
+        .arg(
+            Arg::with_name("lines")
+                .short("n")
+                .long("lines")
+                .value_name("LINES")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("bytes")
+                .short("c")
+                .long("bytes")
+                .takes_value(true)
+                .value_name("BYTES"),
+        )
         .get_matches();
 
-    Ok(Config {
-        files: vec![],
-        lines: 10,
-        bytes: None,
-    })
+    // linesとbytesが指定されたら弾く処理
+    if matches.is_present("lines") && matches.is_present("bytes") {
+        return Err(From::from(
+            "the argument '--lines <LINES>' cannot be used with '--bytes <BYTES>'",
+        ));
+    }
+
+    let files = matches
+        .values_of("files")
+        .map(|vals| vals.map(String::from).collect())
+        .unwrap_or_else(|| vec!["-".to_string()]);
+
+    let lines_val = matches.value_of("lines").unwrap_or("10");
+    let lines = parse_positive_int(lines_val).map_err(|_| {
+        Box::new(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "error: invalid value '{lines_val}' for '--lines <LINES>': \
+invalid digit found in string"
+            ),
+        )) as Box<dyn Error>
+    })?;
+
+    let bytes = matches
+        .value_of("bytes")
+        .map(|val| {
+            parse_positive_int(val).map_err(|_| {
+                Box::new(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!(
+                        "error: invalid value '{val}' for '--bytes <BYTES>': \
+invalid digit found in string"
+                    ),
+                )) as Box<dyn Error>
+            })
+        })
+        .transpose()?;
+    
+    Ok(Config { files, lines, bytes })
 }
 
-pub fn run(config: Config) -> MyResult<()> {
-    println!("{:#?}", config);
+pub fn run_old(config: Config) -> MyResult<()> {
+    for filename in config.files {
+        match open(&filename) {
+            Err(err) => eprintln!("{}: {}", filename, err),
+            Ok(_) => println!("Opened {}", filename),
+        }
+    }
     Ok(())
 }
 
+pub fn run(config: Config) -> MyResult<()> {
+    let multiple = config.files.len() > 1;
+
+    if let Some(n) = config.bytes {
+        for (i, filename) in config.files.iter().enumerate() {
+            if multiple {
+                if i > 0 { print!("\n") }
+                print!("==> {filename} <==\n");
+            }
+
+            match open(filename) {
+                Err(e) => eprintln!("{filename}: {e}"),
+                Ok(mut reader ) => {
+                    let mut buffer = vec![0; n];
+                    let bytes_read = reader.read(&mut buffer)?;
+                    print!("{}", String::from_utf8_lossy(&buffer[..bytes_read]));
+                }
+            }
+        }
+    } else {
+        for (i, filename) in config.files.iter().enumerate() {
+            if multiple {
+                if i > 0 { print!("\n"); }
+                print!("==> {filename} <==\n");
+            }
+
+            match open(filename) {
+                Err(e) => eprintln!("{filename}: {e}"),
+                Ok(mut reader) => {
+                    let mut line = String::new();
+                    for _ in 0..config.lines {
+                        let bytes = reader.read_line(&mut line)?;
+                        if bytes == 0 { break; }
+                        print!("{line}");
+                        line.clear();
+                    }
+                }
+            }
+        }
+        
+    }
+
+    Ok(())
+}
+
+fn open(filename: &str) -> MyResult<Box<dyn BufRead>> {
+    match filename {
+        "-" => Ok(Box::new(BufReader::new(io::stdin()))),
+        _ => Ok(Box::new(BufReader::new(File::open(filename)?))),
+    }
+}
+
+/*
+// 自作 positive_int_self
 fn parse_positive_int_self(val: &str) -> MyResult<usize> {
     match val.parse::<usize>() {
         Ok(0) => Err(Box::new(io::Error::new(io::ErrorKind::InvalidInput, "0"))),
@@ -37,7 +151,9 @@ fn parse_positive_int_self(val: &str) -> MyResult<usize> {
         Err(_) => Err(Box::new(io::Error::new(io::ErrorKind::InvalidInput, val.to_string()))),
     }
 }
+*/
 
+// テキスト
 fn parse_positive_int(val: &str) -> MyResult<usize> {
     match val.parse() {
         Ok(n) if n > 0 => Ok(n),
